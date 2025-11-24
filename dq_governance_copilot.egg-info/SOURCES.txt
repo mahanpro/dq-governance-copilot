@@ -1,0 +1,10 @@
+README.md
+pyproject.toml
+backend/__init__.py
+backend/dqcopilot/__init__.py
+backend/dqcopilot/config.py
+dq_governance_copilot.egg-info/PKG-INFO
+dq_governance_copilot.egg-info/SOURCES.txt
+dq_governance_copilot.egg-info/dependency_links.txt
+dq_governance_copilot.egg-info/requires.txt
+dq_governance_copilot.egg-info/top_level.txt

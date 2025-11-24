@@ -1,0 +1,8 @@
+Metadata-Version: 2.4
+Name: dq-governance-copilot
+Version: 0.0.1
+Summary: Data Quality & Governance Copilot on Databricks
+Author: Your Name
+Requires-Python: >=3.9
+Requires-Dist: sqlglot
+Requires-Dist: pydantic>=2.0
