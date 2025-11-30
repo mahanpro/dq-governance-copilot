@@ -49,7 +49,8 @@ def evaluate_expectations_for_table(
 
     exp_df = spark.table(exp_tbl).where(F.col("table_name") == table_name)
 
-    if exp_df.rdd.isEmpty():
+    # Serverless: avoid exp_df.rdd.isEmpty()
+    if exp_df.limit(1).count() == 0:
         return 0
 
     metrics_dfs = []
@@ -110,7 +111,6 @@ def evaluate_expectations_for_table(
             metrics_dfs.append(agg)
 
         elif etype == "VOLUME_MIN":
-            # Use total row_count per batch; column_name is '*ROW_COUNT*'
             min_rows = int(params.get("min_rows", 0))
             base = (
                 tx.groupBy("batch_date")
@@ -119,8 +119,10 @@ def evaluate_expectations_for_table(
             agg = (
                 base.withColumn(
                     "rows_violated",
-                    F.when(F.col("rows_checked") < F.lit(min_rows),
-                           F.col("rows_checked")).otherwise(F.lit(0)),
+                    F.when(
+                        F.col("rows_checked") < F.lit(min_rows),
+                        F.col("rows_checked"),
+                    ).otherwise(F.lit(0)),
                 )
                 .withColumn(
                     "violation_fraction",
@@ -134,7 +136,7 @@ def evaluate_expectations_for_table(
             metrics_dfs.append(agg)
 
         else:
-            # Unknown expectation type for now; skip
+            # Unknown expectation type for now
             continue
 
     if not metrics_dfs:
