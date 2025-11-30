@@ -9,6 +9,7 @@ These will call Databricks (Spark SQL / Unity Catalog) to fetch:
 
 For now, they are placeholders so unit tests can be wired later.
 """
+from pyspark.sql import SparkSession
 
 def get_table_schema(table_name: str):
     """
@@ -17,5 +18,6 @@ def get_table_schema(table_name: str):
     The agent should call this BEFORE generating any SQL for that table,
     to avoid referencing non-existent columns.
     """
-    raise NotImplementedError
-
+    spark = SparkSession.getActiveSession()
+    df = spark.table(f"dq_demo.core.{table_name}")
+    return [{"name": f.name, "type": f.dataType.simpleString()} for f in df.schema.fields]

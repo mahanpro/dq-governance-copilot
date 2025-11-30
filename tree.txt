@@ -1,3 +1,183 @@
+PROJECT TREE
+============
+├── .git
+├── .venv
+├── .vscode
+├── backend
+│   ├── __pycache__
+│   ├── dqcopilot
+│   │   ├── __pycache__
+│   │   ├── agent
+│   │   │   ├── __init__.py
+│   │   │   ├── graph_app.py
+│   │   │   ├── judges.py
+│   │   │   ├── state.py
+│   │   │   └── tools.py
+│   │   ├── api
+│   │   │   └── __init__.py
+│   │   ├── graph
+│   │   │   ├── __init__.py
+│   │   │   └── model.py
+│   │   ├── profiling
+│   │   │   ├── __init__.py
+│   │   │   ├── anomalies.py
+│   │   │   └── profiler.py
+│   │   ├── __init__.py
+│   │   └── config.py
+│   └── __init__.py
+├── dq_governance_copilot.egg-info
+│   ├── dependency_links.txt
+│   ├── PKG-INFO
+│   ├── requires.txt
+│   ├── SOURCES.txt
+│   └── top_level.txt
+├── tools
+├── .gitignore
+├── pyproject.toml
+├── README.md
+└── tree.txt
+
+
+FILE CONTENTS
+=============
+
+/home/mahanpro/dq-governance-copilot/backend/__init__.py:
+
+/home/mahanpro/dq-governance-copilot/backend/dqcopilot/__init__.py:
+
+/home/mahanpro/dq-governance-copilot/backend/dqcopilot/agent/__init__.py:
+
+/home/mahanpro/dq-governance-copilot/backend/dqcopilot/agent/graph_app.py:
+"""
+LangGraph DAG definition for the governance agent.
+
+Router -> fetch_context -> analysis -> sql_safety_judge -> answer.
+"""
+
+def build_agent_graph():
+    # we will implement this once tools and state are more concrete
+    raise NotImplementedError
+
+/home/mahanpro/dq-governance-copilot/backend/dqcopilot/agent/judges.py:
+"""
+SQL safety and LLM-based judges.
+
+The sqlglot-based is_safe_readonly_sql() lives here.
+"""
+
+import sqlglot
+from sqlglot.expressions import Select
+
+def is_safe_readonly_sql(sql_query: str) -> bool:
+    try:
+        expr = sqlglot.parse_one(sql_query, read="spark")
+    except Exception:
+        return False
+
+    # only allow pure SELECT trees, no INSERT/UPDATE/DELETE/CREATE, etc.
+    if not isinstance(expr, Select):
+        return False
+
+    # optionally, walk the tree and reject if any disallowed nodes appear
+    disallowed = {"Insert", "Update", "Delete", "Create", "Drop", "Alter"}
+    for node in expr.walk():
+        if node.__class__.__name__ in disallowed:
+            return False
+
+    return True
+
+/home/mahanpro/dq-governance-copilot/backend/dqcopilot/agent/state.py:
+"""
+LangGraph agent state definition.
+"""
+from typing import List, Optional, TypedDict
+
+class AgentState(TypedDict, total=False):
+    question: str
+    focus_table: Optional[str]
+    focus_column: Optional[str]
+    # we will define Incident, ProfileSummary, LineageEdge types later
+    incidents: List[dict]
+    profiles: List[dict]
+    lineage: List[dict]
+    suggestions: List[str]
+    judge_scores: List[float]
+    sql_safety_flags: List[bool]
+    draft_answer: Optional[str]
+    iterations: int
+
+/home/mahanpro/dq-governance-copilot/backend/dqcopilot/agent/tools.py:
+"""
+Tool functions for the agent.
+
+These will call Databricks (Spark SQL / Unity Catalog) to fetch:
+- table schema
+- dq_profiles
+- dq_incidents
+- lineage info
+
+For now, they are placeholders so unit tests can be wired later.
+"""
+from pyspark.sql import SparkSession
+
+def get_table_schema(table_name: str):
+    """
+    Return column names and types for the given table.
+
+    The agent should call this BEFORE generating any SQL for that table,
+    to avoid referencing non-existent columns.
+    """
+    spark = SparkSession.getActiveSession()
+    df = spark.table(f"dq_demo.core.{table_name}")
+    return [{"name": f.name, "type": f.dataType.simpleString()} for f in df.schema.fields]
+
+/home/mahanpro/dq-governance-copilot/backend/dqcopilot/api/__init__.py:
+
+/home/mahanpro/dq-governance-copilot/backend/dqcopilot/config.py:
+from dataclasses import dataclass
+
+@dataclass
+class DQConfig:
+    # Later you can add Databricks workspace URLs, catalog/schema names, etc.
+    catalog: str = "dq_demo"
+    schema: str = "core"
+
+/home/mahanpro/dq-governance-copilot/backend/dqcopilot/graph/__init__.py:
+
+/home/mahanpro/dq-governance-copilot/backend/dqcopilot/graph/model.py:
+"""
+In-memory asset and lineage graph.
+
+In production this would use Databricks system lineage tables
+(e.g. system.lineage.table_lineage and system.lineage.column_lineage).
+Here we will simulate lineage with a static mapping.
+
+Nodes: Table, Column, Job, Incident.
+Edges: Table->Column, Column->Incident, Job->Table, etc.
+"""
+
+from dataclasses import dataclass
+from typing import List, Dict
+
+@dataclass
+class TableNode:
+    name: str
+    owner_team: str
+
+@dataclass
+class ColumnNode:
+    table: str
+    name: str
+
+@dataclass
+class IncidentNode:
+    id: str
+    table: str
+    column: str
+
+/home/mahanpro/dq-governance-copilot/backend/dqcopilot/profiling/__init__.py:
+
+/home/mahanpro/dq-governance-copilot/backend/dqcopilot/profiling/anomalies.py:
 """
 Anomaly detection rules over dq_profiles.
 
@@ -384,3 +564,196 @@ def detect_volume_drop(
 
     incidents_df.write.mode("append").format("delta").saveAsTable(incidents_tbl)
     return incidents_df
+
+/home/mahanpro/dq-governance-copilot/backend/dqcopilot/profiling/profiler.py:
+"""
+Profiling utilities for dq_profiles.
+
+Contains functions to compute per column statistics
+(row_count, null_fraction, distinct_count, etc.).
+"""
+
+from dataclasses import dataclass
+from typing import List, Optional
+
+from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
+
+from ..config import DQConfig
+
+
+@dataclass
+class ColumnProfile:
+    table_name: str
+    column_name: str
+    batch_date: str
+    row_count: int
+    null_count: int
+    null_fraction: float
+    distinct_count: int
+    min_value: str
+    max_value: str
+
+
+def describe_table_schema(
+    spark: SparkSession,
+    table_name: str,
+    catalog: Optional[str] = None,
+    schema: Optional[str] = None,
+) -> List[dict]:
+    """
+    Return a simple schema description for a table
+    so the agent or tests can inspect it.
+    """
+    cfg = DQConfig()
+    catalog = catalog or cfg.catalog
+    schema = schema or cfg.schema
+
+    full_name = f"{catalog}.{schema}.{table_name}"
+    df = spark.table(full_name)
+
+    return [
+        {
+            "name": f.name,
+            "type": f.dataType.simpleString(),
+            "nullable": f.nullable,
+        }
+        for f in df.schema.fields
+    ]
+
+
+def profile_table(
+    spark: SparkSession,
+    table_name: str,
+    date_col: str = "created_date",
+    catalog: Optional[str] = None,
+    schema: Optional[str] = None,
+) -> Optional[DataFrame]:
+    """
+    Compute per column profiles for a table.
+
+    Returns a DataFrame with schema matching dq_profiles:
+      table_name, column_name, batch_date,
+      row_count, null_count, null_fraction,
+      distinct_count, min_value, max_value, profile_ts
+
+    Does not write into dq_profiles. Caller is responsible for writing.
+    """
+    cfg = DQConfig()
+    catalog = catalog or cfg.catalog
+    schema = schema or cfg.schema
+
+    full_name = f"{catalog}.{schema}.{table_name}"
+    df = spark.table(full_name)
+
+    if date_col not in df.columns:
+        raise ValueError(
+            f"date_col '{date_col}' not found in table {full_name}. "
+            f"Available columns: {df.columns}"
+        )
+
+    # Normalize to batch_date
+    df = df.withColumn("batch_date", F.col(date_col).cast("date"))
+
+    # Numeric vs other columns, similar to the notebook
+    numeric_cols = [
+        f.name
+        for f in df.schema.fields
+        if isinstance(
+            f.dataType,
+            (
+                T.IntegerType,
+                T.LongType,
+                T.DoubleType,
+                T.FloatType,
+                T.DecimalType,
+            ),
+        )
+    ]
+    other_cols = [
+        f.name
+        for f in df.schema.fields
+        if f.name not in numeric_cols and f.name not in ["batch_date"]
+    ]
+
+    profile_dfs = []
+
+    for col in numeric_cols + other_cols:
+        col_df = (
+            df.groupBy("batch_date")
+            .agg(
+                F.count(F.lit(1)).alias("row_count"),
+                F.count(F.when(F.col(col).isNull(), 1)).alias("null_count"),
+                F.countDistinct(F.col(col)).alias("distinct_count"),
+                F.min(F.col(col)).cast("string").alias("min_value"),
+                F.max(F.col(col)).cast("string").alias("max_value"),
+            )
+            .withColumn("null_fraction", F.col("null_count") / F.col("row_count"))
+            .withColumn("table_name", F.lit(table_name))
+            .withColumn("column_name", F.lit(col))
+            .withColumn("profile_ts", F.current_timestamp())
+            .select(
+                "table_name",
+                "column_name",
+                "batch_date",
+                "row_count",
+                "null_count",
+                "null_fraction",
+                "distinct_count",
+                "min_value",
+                "max_value",
+                "profile_ts",
+            )
+        )
+        profile_dfs.append(col_df)
+
+    if not profile_dfs:
+        return None
+
+    combined = profile_dfs[0]
+    for p in profile_dfs[1:]:
+        combined = combined.unionByName(p)
+
+    return combined
+
+
+def compute_profiles_for_table(
+    spark: SparkSession,
+    table_name: str,
+    date_col: str = "created_date",
+    catalog: Optional[str] = None,
+    schema: Optional[str] = None,
+    truncate_existing: bool = False,
+) -> int:
+    """
+    Convenience function: profile a table and write the rows into dq_profiles.
+
+    Returns the number of profile rows written.
+    """
+    cfg = DQConfig()
+    catalog = catalog or cfg.catalog
+    schema = schema or cfg.schema
+
+    profiles_df = profile_table(
+        spark=spark,
+        table_name=table_name,
+        date_col=date_col,
+        catalog=catalog,
+        schema=schema,
+    )
+
+    if profiles_df is None:
+        return 0
+
+    dq_profiles_table = f"{catalog}.{schema}.dq_profiles"
+
+    if truncate_existing:
+        spark.sql(f"TRUNCATE TABLE {dq_profiles_table}")
+
+    # Write profiles
+    profiles_df.write.mode("append").format("delta").saveAsTable(dq_profiles_table)
+
+    # For synthetic scale this count is acceptable
+    return profiles_df.count()
+

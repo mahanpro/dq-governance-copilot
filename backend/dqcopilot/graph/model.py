@@ -8,3 +8,22 @@ Here we will simulate lineage with a static mapping.
 Nodes: Table, Column, Job, Incident.
 Edges: Table->Column, Column->Incident, Job->Table, etc.
 """
+
+from dataclasses import dataclass
+from typing import List, Dict
+
+@dataclass
+class TableNode:
+    name: str
+    owner_team: str
+
+@dataclass
+class ColumnNode:
+    table: str
+    name: str
+
+@dataclass
+class IncidentNode:
+    id: str
+    table: str
+    column: str
